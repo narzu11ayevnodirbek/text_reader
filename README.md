@@ -8,8 +8,5 @@ Android ilova yangi versiyalarni GitHub Releases'dan o'zi tekshiradi, yuklab ola
 Qanday ishlashi, yangi versiya qanday chiqarilishi va imzolash kaliti haqida batafsil:
 **[docs/OTA_UPDATE.md](docs/OTA_UPDATE.md)**.
 
-Qisqacha: `pubspec.yaml` dagi versiyani oshiring (`0.1.1+2`), commit/push qiling, so'ng:
-
-```bash
-git tag -a v0.1.1 -m "Nima o'zgardi" && git push origin v0.1.1
-```
+Qisqacha: `pubspec.yaml` dagi versiyani oshiring (`0.1.1+2` → `0.1.2+3`) va main'ga push qiling — GitHub Actions
+APKni build qilib, reliz chiqaradi. Tag'ni qo'lda qo'ymang.

@@ -1,16 +1,17 @@
 name: Release APK
 
-# Yangi versiya chiqarishning ikki yo'li (avval pubspec.yaml dagi versiyani oshiring):
-#   1) git tag -a v0.1.1 -m "Nima o'zgardi" && git push origin v0.1.1
-#   2) GitHub → Actions → Release APK → Run workflow
+# Yangi versiya chiqarish: pubspec.yaml dagi versiyani oshirib (0.1.1+2 → 0.1.2+3) main'ga push qiling.
+# Workflow APKni build qiladi va GitHub Release chiqaradi — ilovalar yangilanish oynasini ko'rsatadi.
+# Versiya o'zgarmagan push'larda faqat "check" ishlaydi va build o'tkazib yuboriladi. Tag'ni qo'lda qo'ymang.
+# Majburiy yangilash yoki qayta urinish: GitHub → Actions → Release APK → Run workflow.
 # Batafsil: docs/OTA_UPDATE.md
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
     inputs:
       notes:
-        description: "Nima o'zgardi (ilovadagi yangilanish oynasida ko'rinadi)"
+        description: "Nima o'zgardi (bo'sh qolsa — oxirgi relizdan keyingi commit'lar ro'yxati)"
         required: false
         default: ''
       min_version_code:
@@ -26,9 +27,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      name: ${{ steps.version.outputs.name }}
+      code: ${{ steps.version.outputs.code }}
+      tag: ${{ steps.version.outputs.tag }}
+      prev_tag: ${{ steps.version.outputs.prev_tag }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -37,41 +43,77 @@ jobs:
       - name: Versiyani aniqlash
         id: version
         env:
+          GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
-          INPUT_NOTES: ${{ inputs.notes }}
         run: |
           line=$(grep -E '^version:' pubspec.yaml)
           name=$(echo "$line" | sed -E 's/^version:[[:space:]]*([^+]+)\+([0-9]+).*/\1/')
           code=$(echo "$line" | sed -E 's/^version:[[:space:]]*([^+]+)\+([0-9]+).*/\2/')
           tag="v$name"
+          echo "pubspec.yaml: $name+$code"
 
-          if [ "$EVENT" = "push" ]; then
-            if [ "$GITHUB_REF_NAME" != "$tag" ]; then
-              echo "::error::Tag ($GITHUB_REF_NAME) pubspec.yaml dagi versiyaga ($tag) mos emas"
+          if [ "$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null)" = "false" ]; then
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              echo "::error::$tag relizi allaqachon bor — pubspec.yaml dagi versiyani oshiring"
               exit 1
             fi
-            # actions/checkout annotated tag'ni oddiy tag'ga aylantirib qo'yishi mumkin — xabarini qayta olamiz.
-            git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
-            git tag -l --format='%(contents)' "$tag" > notes.txt
-          else
-            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              echo "::error::$tag allaqachon mavjud — pubspec.yaml dagi versiyani oshiring"
-              exit 1
-            fi
-            printf '%s' "$INPUT_NOTES" > notes.txt
+            echo "$tag relizi allaqachon bor — versiya o'zgarmagan, reliz kerak emas."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          # Ilova faqat versionCode kattaroq bo'lsa yangilanadi, Android ham kichigini o'rnatmaydi.
-          prev=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/version.json" 2>/dev/null | jq -r '.versionCode // 0' 2>/dev/null) || prev=0
-          prev=${prev:-0}
-          if [ "$code" -le "$prev" ]; then
-            echo "::error::versionCode ($code) oldingi relizdagidan ($prev) katta bo'lishi kerak — pubspec.yaml da '+' dan keyingi raqamni oshiring"
+          # Reliz tag'ni o'zi yaratadi. Qo'lda qo'yilgan tag boshqa commit'da tursa, reliz noto'g'ri kodga bog'lanib qoladi.
+          tag_sha=$(git rev-parse -q --verify "refs/tags/$tag^{commit}" || true)
+          if [ -n "$tag_sha" ] && [ "$tag_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::$tag tag'i boshqa commit'da turibdi, lekin relizi yo'q. Uni o'chiring: git push origin :refs/tags/$tag && git tag -d $tag"
             exit 1
           fi
 
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # Ilova faqat versionCode kattaroq bo'lsa yangilanadi, Android ham kichigini o'rnatmaydi.
+          prev_tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          prev_code=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/version.json" 2>/dev/null | jq -r '.versionCode // 0' 2>/dev/null || true)
+          prev_code=${prev_code:-0}
+          if [ "$code" -le "$prev_code" ]; then
+            echo "::warning::pubspec.yaml dagi versionCode ($code) oldingi relizdagidan ($prev_code) katta emas — $((prev_code + 1)) ishlatildi. pubspec.yaml da '+' dan keyingi raqamni ham oshirib qo'ying."
+            code=$((prev_code + 1))
+          fi
+
+          echo "Reliz: $tag (versionCode $code), oldingisi: ${prev_tag:--} ($prev_code)"
+          {
+            echo "release=true"
+            echo "name=$name"
+            echo "code=$code"
+            echo "tag=$tag"
+            echo "prev_tag=$prev_tag"
+          } >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+      VERSION_CODE: ${{ needs.check.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Nima o'zgardi
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
+          PREV_TAG: ${{ needs.check.outputs.prev_tag }}
+        run: |
+          # Ilovadagi yangilanish oynasida ko'rinadi.
+          if [ -n "$INPUT_NOTES" ]; then
+            printf '%s\n' "$INPUT_NOTES" > notes.txt
+          elif [ -n "$PREV_TAG" ] && git rev-parse -q --verify "refs/tags/$PREV_TAG" >/dev/null; then
+            git log --no-merges --format='- %s' "$PREV_TAG..HEAD" | head -n 20 > notes.txt
+          else
+            echo "- Birinchi versiya" > notes.txt
+          fi
+          cat notes.txt
 
       - name: Imzolash kalitini tiklash
         env:
@@ -110,10 +152,10 @@ jobs:
 
       - name: APK va version.json
         env:
-          TAG: ${{ steps.version.outputs.tag }}
           MIN_VERSION_CODE: ${{ inputs.min_version_code || '0' }}
         run: |
           dart run tool/make_update.dart \
+            --build-number "$VERSION_CODE" \
             --notes-file notes.txt \
             --min-version-code "$MIN_VERSION_CODE" \
             --apk-base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/"
@@ -122,8 +164,11 @@ jobs:
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
         run: |
+          # Oldingi muvaffaqiyatsiz urinishdan qolgan qoralama bo'lsa — o'chiramiz (chop etilgani bu yerga yetib kelmaydi).
+          if [ "$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null)" = "true" ]; then
+            gh release delete "$TAG" --yes
+          fi
           # Avval qoralama: fayllar to'liq yuklanmaguncha ilovalar yarim tayyor relizni "latest" deb ko'rmasin.
           gh release create "$TAG" build/ota/* --draft --title "$TAG" --notes-file notes.txt --target "$GITHUB_SHA"
           gh release edit "$TAG" --draft=false --latest

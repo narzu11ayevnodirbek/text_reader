@@ -26,16 +26,15 @@ va muammo chiqsa nima qilish kerak.
 
 ```bash
 # 1. pubspec.yaml dagi versiyani oshiring:  version: 0.1.0+1  →  version: 0.1.1+2
-# 2. O'zgarishlarni commit va push qiling
-git add -A && git commit -m "0.1.1: karta raqamini o'qish yaxshilandi" && git push
-
-# 3. Tag qo'ying — GitHub qolganini o'zi qiladi
-git tag -a v0.1.1 -m "Karta raqamini o'qish yaxshilandi"
-git push origin v0.1.1
+# 2. Commit qilib main'ga push qiling — GitHub qolganini o'zi qiladi
+git add -A && git commit -m "Karta raqamini o'qish yaxshilandi" && git push
 ```
 
 Taxminan 10 daqiqadan keyin GitHub'da `v0.1.1` relizi paydo bo'ladi. Foydalanuvchilar ilovani keyingi safar
 ochganda **"Yangi versiya mavjud"** oynasini ko'rishadi, "Yangilash"ni bosishadi va ilova yangilanadi.
+
+**Tag'ni qo'lda qo'ymang** — reliz va tag'ni workflow o'zi yaratadi. Versiya o'zgarmagan push'lar reliz
+chiqarmaydi, shuning uchun main'ga bemalol push qilavering.
 
 ---
 
@@ -71,8 +70,8 @@ sequenceDiagram
     participant App as Ilova (telefonda)
     actor User as Foydalanuvchi
 
-    Dev->>GH: git push origin v0.1.1 (tag)
-    GH->>GH: flutter test, flutter build apk (release kalit bilan imzolanadi)
+    Dev->>GH: git push (main, pubspec: 0.1.1+2)
+    GH->>GH: v0.1.1 relizi yo'q → flutter test, flutter build apk (release kalit bilan imzolanadi)
     GH->>GH: Release v0.1.1: text_reader-2.apk + version.json (SHA-256 bilan)
 
     User->>App: Ilovani ochadi
@@ -106,16 +105,21 @@ version: 0.1.1+2
 
 | Qism | Nomi | Qayerda ishlatiladi |
 |---|---|---|
-| `0.1.1` | **versionName** | Foydalanuvchiga ko'rsatiladi ("Versiya 0.1.1"). Android'da `versionName`, Dart'da `PackageInfo.version`. Git tag shundan yasaladi: `v0.1.1`. |
-| `2` | **versionCode** | Android'ning ichki raqami. Dart'da `PackageInfo.buildNumber`. **Yangilanish faqat shu raqam bo'yicha aniqlanadi.** |
+| `0.1.1` | **versionName** | Foydalanuvchiga ko'rsatiladi ("Versiya 0.1.1"). Android'da `versionName`, Dart'da `PackageInfo.version`. Reliz va git tag shundan yasaladi: `v0.1.1`. |
+| `2` | **versionCode** | Android'ning ichki raqami. Dart'da `PackageInfo.buildNumber`. **Ilova yangilanishni faqat shu raqam bo'yicha aniqlaydi.** |
 
 Qoidalar:
 
-1. **Har bir relizda versionCode'ni oshiring** (`+1` → `+2` → `+3`...). Agar oshirmasangiz, ilova yangilanishni
-   ko'rmaydi (`2 > 2` — yolg'on), Android ham o'sha yoki kichikroq versionCode'li APKni ustiga o'rnatmaydi.
-2. versionName'ni o'zingiz xohlagancha o'zgartirasiz (odatda [semver](https://semver.org/): `major.minor.patch`).
-3. Tag doim `v` + versionName bo'ladi. Workflow buni tekshiradi: `pubspec.yaml` da `0.1.1` turib, `v0.1.2`
-   tagini push qilsangiz, build xato bilan to'xtaydi.
+1. **Yangi reliz versionName o'zgarganda chiqadi.** main'ga push bo'lganda workflow `v<versionName>` relizi
+   bor-yo'qligini tekshiradi: yo'q bo'lsa — build va reliz, bor bo'lsa — hech narsa qilmaydi. Shuning uchun
+   faqat `+` dan keyingi raqamni oshirish (`0.1.1+2` → `0.1.1+3`) reliz chiqarmaydi.
+2. **versionCode'ni ham oshiring** (`+1` → `+2` → `+3`...). Ilova faqat `versionCode` kattaroq bo'lsa
+   yangilanishni ko'radi, Android ham o'sha yoki kichikroq versionCode'li APKni ustiga o'rnatmaydi. Esdan
+   chiqsa, workflow oldingi relizdagi raqamga `+1` qilib build qiladi va ogohlantirish yozadi — reliz baribir
+   to'g'ri chiqadi, lekin pubspec'ni keyin moslab qo'ygan ma'qul.
+3. versionName'ni o'zingiz xohlagancha o'zgartirasiz (odatda [semver](https://semver.org/): `major.minor.patch`).
+4. **Tag'ni qo'lda qo'ymang.** Workflow uni reliz bilan birga o'zi yaratadi. Qo'lda qo'yilgan tag boshqa
+   commit'da tursa, workflow xato beradi ([12.2](#122-github-actionsda)).
 
 | Reliz | pubspec | Tag |
 |---|---|---|
@@ -571,14 +575,15 @@ dart run tool/make_update.dart --notes "Nima o'zgardi"
 | `--notes "matn"` | `releaseNotes`. |
 | `--notes-file fayl` | `releaseNotes` ni fayldan o'qiydi (ko'p qatorli matn uchun qulay). |
 | `--min-version-code N` | Majburiy yangilash chegarasi (standart `0`). |
+| `--build-number N` | versionCode'ni pubspec'dagi `+` dan keyingi raqam o'rniga `N` qiladi (`flutter build apk --build-number=N`). Workflow pubspec'dagi raqam oshirilmagan bo'lsa shu bilan to'g'rilaydi. |
 | `--apk-base-url URL` | `apkUrl` ni shu manzil + fayl nomi qilib yozadi. Berilmasa — nisbiy nom (`text_reader-2.apk`). |
 | `--manifest-url URL` | Build'ga `--dart-define=UPDATE_MANIFEST_URL=URL` qo'shadi. Yangi APK ham keyingi yangilanishlarni shu manzildan qidirishi uchun (lokal sinovda kerak). |
 | `--debug` | Release o'rniga debug APK (lokal sinov uchun). |
 
 Ishlash tartibi:
-1. `pubspec.yaml` dan `version: X+Y` ni o'qiydi.
+1. `pubspec.yaml` dan `version: X+Y` ni o'qiydi (`--build-number` berilgan bo'lsa, `Y` o'rniga shu).
 2. Release rejimida `android/key.properties` yo'q bo'lsa — ogohlantiradi.
-3. `flutter build apk --release` (yoki `--debug`) ni ishga tushiradi, chiqishini ekranga uzatadi.
+3. `flutter build apk --release --build-number=Y` (yoki `--debug`) ni ishga tushiradi, chiqishini ekranga uzatadi.
 4. `build/ota/` ni tozalab, APKni `build/ota/text_reader-<versionCode>.apk` ga ko'chiradi.
 5. SHA-256 ni hisoblaydi (`package:crypto`, faylni oqim bilan o'qiydi — xotiraga butunlay yuklamaydi).
 6. `build/ota/version.json` ni yozadi.
@@ -588,27 +593,36 @@ Ishlash tartibi:
 GitHub Actions — GitHub serverlarida (Ubuntu virtual mashina) avtomatik ishlaydigan skript.
 
 **Qachon ishga tushadi:**
-- `v` bilan boshlanadigan tag push qilinganda (`git push origin v0.1.1`). "Nima o'zgardi" matni tag
-  xabaridan olinadi (`git tag -a v0.1.1 -m "..."`).
+- `main` ga har push'da. Reliz faqat `pubspec.yaml` dagi versiya uchun reliz hali bo'lmasa chiqadi, boshqa
+  push'larda faqat ~15 soniyalik tekshiruv ishlaydi.
 - Qo'lda: GitHub → **Actions** → **Release APK** → **Run workflow**. Bu yerda "nima o'zgardi" matnini va
-  `min_version_code` (majburiy yangilash) ni formaga yozasiz. Tag'ni workflow o'zi yaratadi.
+  `min_version_code` (majburiy yangilash) ni formaga yozasiz. Oldingi urinish yiqilgan bo'lsa (masalan,
+  secret'lar yo'q edi), qayta ishga tushirish uchun ham shu tugma.
 
-`permissions: contents: write` — workflow'ga reliz yaratish huquqi. `concurrency: release` — bir vaqtda
-ikkita reliz build qilinmaydi, ikkinchisi birinchisini kutadi.
+`permissions: contents: write` — workflow'ga reliz va tag yaratish huquqi. `concurrency: release` — bir
+vaqtda ikkita reliz build qilinmaydi, ikkinchisi birinchisini kutadi.
 
-**Qadamlar:**
+Workflow ikki job'dan iborat:
+
+**1-job: `check`** — reliz kerakmi?
 
 1. **`actions/checkout`** (`fetch-depth: 0`) — kodni va barcha tag'larni yuklab oladi.
 2. **Versiyani aniqlash:**
    - `pubspec.yaml` dan versionName va versionCode olinadi, tag = `v<versionName>`.
-   - Tag push qilingan bo'lsa: tag nomi pubspec bilan mos kelishi tekshiriladi. Tag xabari `notes.txt` ga
-     yoziladi. `git fetch --force ... refs/tags/...` qatori shu uchun kerak: `actions/checkout` annotated
-     tag'ni oddiy tag'ga aylantirib qo'yishi mumkin, shunda uning xabari yo'qoladi.
-   - Qo'lda ishga tushirilgan bo'lsa: shu tag allaqachon bor-yo'qligi tekshiriladi (versiyani oshirish
-     esdan chiqqan bo'lsa to'xtaydi). Formadagi matn `notes.txt` ga yoziladi.
-   - Oxirgi relizdagi `version.json` dan oldingi versionCode o'qiladi. Yangisi undan katta bo'lmasa —
-     xato. Bu "versionCode'ni oshirish esdan chiqdi" holatidan himoya qiladi (aks holda reliz chiqardi,
-     lekin hech kim yangilanmasdi).
+   - `v<versionName>` relizi allaqachon e'lon qilingan bo'lsa → `release=false`, ikkinchi job o'tkazib
+     yuboriladi (Actions'da kulrang "skipped"). Qo'lda ishga tushirilgan bo'lsa esa xato: "versiyani oshiring".
+   - Shu nomli tag bor, lekin boshqa commit'da tursa (qo'lda qo'yilgan) — xato. Aks holda reliz eski commit'ga
+     bog'lanib qolardi.
+   - Oxirgi relizdagi `version.json` dan oldingi versionCode o'qiladi. pubspec'dagi raqam undan katta
+     bo'lmasa, `oldingi + 1` ishlatiladi va ogohlantirish chiqadi. Aks holda reliz chiqardi, lekin hech kim
+     yangilanmasdi (`2 > 2` — yolg'on).
+
+**2-job: `release`** — faqat `check` "kerak" desa ishlaydi.
+
+1. **`actions/checkout`** — qaytadan, chunki har bir job alohida virtual mashinada ishlaydi.
+2. **Nima o'zgardi** — dialogdagi matn (`notes.txt`): "Run workflow" formasidagi matn, u bo'sh bo'lsa
+   oldingi relizdan keyingi commit xabarlari (`- ...` ko'rinishida, ko'pi bilan 20 ta). Birinchi relizda —
+   "Birinchi versiya". Shuning uchun **commit xabarlarini tushunarli yozing** — foydalanuvchi ularni ko'radi.
 3. **Imzolash kalitini tiklash:** GitHub secret'laridan keystore (base64 ko'rinishida) va parollar olinib,
    `android/app/release-keystore.jks` va `android/key.properties` yaratiladi. Birorta secret yo'q bo'lsa,
    build to'xtaydi — aks holda APK debug kalit bilan imzolanib, hech kimga o'rnatilmasdi.
@@ -617,13 +631,16 @@ ikkita reliz build qilinmaydi, ikkinchisi birinchisini kutadi.
 5. **`subosito/flutter-action`** — Flutter 3.41.6 (lokaldagi bilan bir xil versiya). `cache: true` — SDK
    keshlanadi.
 6. **`flutter pub get`** va **`flutter test`** — testlar o'tmasa reliz chiqmaydi.
-7. **APK va `version.json`** — `tool/make_update.dart` ishga tushadi. `--apk-base-url` aniq tag manziliga
+7. **APK va `version.json`** — `tool/make_update.dart` ishga tushadi (`--build-number` — `check` aniqlagan
+   versionCode). `--apk-base-url` aniq tag manziliga
    (`.../releases/download/v0.1.1/`) ishora qiladi. Agar `latest` ishlatilganda, foydalanuvchi `version.json`
    ni o'qigan payt bilan APKni yuklagan payt orasida yangi reliz chiqsa, `latest` boshqa relizga o'tib
    qolardi va APK topilmasdi. Aniq tag bilan bu muammo bo'lmaydi.
 8. **GitHub Release** — `gh` CLI (GitHub runner'larida oldindan o'rnatilgan) bilan:
-   - avval **qoralama** (draft) reliz yaratiladi va ikkala fayl yuklanadi;
-   - keyin `--draft=false --latest` bilan e'lon qilinadi.
+   - oldingi yiqilgan urinishdan qoralama qolgan bo'lsa, o'chiriladi;
+   - **qoralama** (draft) reliz yaratiladi va ikkala fayl yuklanadi;
+   - keyin `--draft=false --latest` bilan e'lon qilinadi. Shu payt GitHub `v<versionName>` tag'ini aynan
+     build qilingan commit'ga (`--target $GITHUB_SHA`) qo'yadi.
 
    Sababi: reliz darhol e'lon qilinsa, fayllar yuklanib bo'lguncha bir necha soniya `latest` reliz
    `version.json` siz qoladi va o'sha paytda tekshirgan ilovalar 404 olardi.
@@ -738,9 +755,11 @@ Brauzer orqali: repo → **Settings** → **Secrets and variables** → **Action
 
 ### 8.4. Birinchi reliz
 
+Secret'lar qo'shilgach, main'ga istalgan push (yoki **Actions → Release APK → Run workflow**) `pubspec.yaml`
+dagi versiya bilan birinchi relizni chiqaradi:
+
 ```bash
-git tag -a v0.1.0 -m "Birinchi versiya"
-git push origin v0.1.0
+git push               # yoki: gh workflow run release.yml
 gh run watch           # build jarayonini kuzatish
 ```
 
@@ -752,29 +771,31 @@ Birinchi versiyani foydalanuvchilar **qo'lda** o'rnatadi (OTA undan keyingi vers
 
 ## 9. Har safar yangi versiya chiqarish
 
-### 9.1. Tag orqali (terminal)
+### 9.1. Oddiy yo'l: versiyani oshirib main'ga push
 
 ```bash
-# 1) pubspec.yaml:  version: 0.1.1+2
+# 1) pubspec.yaml:  version: 0.1.1+2  →  version: 0.1.2+3
+# 2) Commit va push (commit xabarlari dialogdagi "Nima o'zgardi" ro'yxatiga tushadi)
 git add -A
-git commit -m "0.1.1: ..."
+git commit -m "Karta raqamini o'qish yaxshilandi"
 git push
-
-# 2) Tag (xabari = "Nima o'zgardi", dialogda ko'rinadi)
-git tag -a v0.1.1 -m "Karta raqamini o'qish yaxshilandi
-JSHSHIR topilmasa xabar chiqadi"
-git push origin v0.1.1
 
 # 3) Kuzatish
 gh run watch
 ```
 
-### 9.2. GitHub sahifasi orqali (majburiy yangilash ham shu yerda)
+Versiya o'zgarmagan bo'lsa, workflow reliz chiqarmaydi — oddiy commit'larni ham main'ga bemalol push qiling.
 
-1. `pubspec.yaml` dagi versiyani oshirib, commit + push qiling.
+### 9.2. GitHub sahifasi orqali (majburiy yangilash, o'z matningiz bilan)
+
+1. `pubspec.yaml` dagi versiyani oshirib, commit + push qiling. Push o'zi relizni boshlab yuboradi — agar
+   majburiy yangilash kerak bo'lsa, uni GitHub → **Actions** da bekor qiling (**Cancel workflow**).
 2. GitHub → repo → **Actions** → chapda **Release APK** → **Run workflow**.
-3. *Nima o'zgardi* — matn; *Majburiy yangilash* — `0` yoki versionCode (masalan, `3`).
+3. *Nima o'zgardi* — matn (bo'sh qolsa — commit'lar ro'yxati); *Majburiy yangilash* — `0` yoki versionCode
+   (masalan, `3`).
 4. **Run workflow**.
+
+Yoki terminaldan: `gh workflow run release.yml -f notes="..." -f min_version_code=3`.
 
 ### 9.3. Natijani tekshirish
 
@@ -837,7 +858,7 @@ ustiga o'rnatiladi. `localhost` ga HTTP faqat debug build'da ruxsat etilgan ([6.
 
 | Belgi | Sabab | Yechim |
 |---|---|---|
-| Debug Console: `Yangilanishni tekshirib bo'lmadi: ClientException: HTTP 404` | Hali birorta reliz yo'q, reliz qoralama (draft) holatida, repo private yoki manzil noto'g'ri | GitHub → Releases'ni tekshiring; brauzerda `.../releases/latest/download/version.json` ochilishi kerak |
+| Debug Console: `Yangilanishni tekshirib bo'lmadi: ClientException: HTTP 404` | Hali birorta reliz yo'q, oxirgi reliz GitHub sahifasida **qo'lda** yaratilgan (ichida `version.json` yo'q), reliz qoralama (draft) holatida, repo private yoki manzil noto'g'ri | GitHub → Releases'ni tekshiring; qo'lda yaratilgan relizni o'chiring; brauzerda `.../releases/latest/download/version.json` ochilishi kerak |
 | Debug Console: `TimeoutException` / `SocketException` | Internet yo'q yoki sekin | Normal holat, ilova ishlayveradi |
 | Dialog chiqmaydi, xato ham yo'q | `version.json` dagi `versionCode` o'rnatilgandan katta emas | `pubspec.yaml` da `+` dan keyingi raqamni oshirib, qayta reliz qiling |
 | "Yangilash uchun sozlamalarda ... ruxsat bering" | "Noma'lum ilovalarni o'rnatish" yoqilmagan | Sozlamalar → Ilovalar → Text Reader → Noma'lum ilovalarni o'rnatish → Ruxsat |
@@ -853,10 +874,11 @@ ustiga o'rnatiladi. `localhost` ga HTTP faqat debug build'da ruxsat etilgan ([6.
 
 | Xato | Yechim |
 |---|---|
-| `Tag (v0.1.2) pubspec.yaml dagi versiyaga (v0.1.1) mos emas` | Tag'ni o'chiring (`git push --delete origin v0.1.2 && git tag -d v0.1.2`), pubspec'ni to'g'rilab, qayta tag qo'ying |
-| `versionCode (2) oldingi relizdagidan (2) katta bo'lishi kerak` | `pubspec.yaml` da `+` dan keyingi raqamni oshiring |
-| `v0.1.1 allaqachon mavjud` | Versiyani oshiring (Run workflow uchun) |
-| `ANDROID_* secret'lar to'liq emas` | [8.3](#83-github-secretlar) ni bajaring |
+| Push qildim, lekin reliz chiqmadi (`release` job "skipped") | `pubspec.yaml` dagi versionName uchun reliz allaqachon bor — versionName'ni oshiring (`0.1.1` → `0.1.2`), faqat `+` raqami yetmaydi |
+| `v0.1.2 tag'i boshqa commit'da turibdi, lekin relizi yo'q` | Tag qo'lda qo'yilgan: `git push origin :refs/tags/v0.1.2 && git tag -d v0.1.2`, so'ng **Run workflow** yoki yangi push |
+| Ogohlantirish: `versionCode (1) oldingi relizdagidan (2) katta emas — 3 ishlatildi` | Reliz chiqdi, lekin `pubspec.yaml` da `+` dan keyingi raqamni shunga moslab qo'ying |
+| `v0.1.1 relizi allaqachon bor — ... oshiring` | Run workflow'da: versiyani oshiring |
+| `ANDROID_* secret'lar to'liq emas` | [8.3](#83-github-secretlar) ni bajaring, so'ng **Run workflow** |
 | `flutter test` yiqildi | Avval lokal `flutter test` ni tuzating |
 | `Keystore was tampered with, or password was incorrect` | `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_PASSWORD` noto'g'ri — qayta yozing |
 

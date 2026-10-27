@@ -1,7 +1,7 @@
 // Yangi versiyani chiqarish uchun fayllarni tayyorlaydi (GitHub Actions ham shuni ishlatadi):
 //
 //   dart run tool/make_update.dart [--notes "Nima o'zgardi" | --notes-file notes.txt] [--min-version-code 3]
-//                                  [--apk-base-url URL] [--manifest-url URL] [--debug]
+//                                  [--build-number N] [--apk-base-url URL] [--manifest-url URL] [--debug]
 //
 // Natija: build/ota/ ichida text_reader-<versionCode>.apk va version.json.
 import 'dart:convert';
@@ -12,6 +12,7 @@ import 'package:crypto/crypto.dart';
 Future<void> main(List<String> args) async {
   var notes = '';
   var minVersionCode = 0;
+  int? buildNumber;
   String? apkBaseUrl;
   String? manifestUrl;
   var debug = false;
@@ -25,6 +26,8 @@ Future<void> main(List<String> args) async {
         notes = File(value()).readAsStringSync();
       case '--min-version-code':
         minVersionCode = int.tryParse(value()) ?? _fail('--min-version-code butun son bo\'lishi kerak');
+      case '--build-number':
+        buildNumber = int.tryParse(value()) ?? _fail('--build-number butun son bo\'lishi kerak');
       case '--apk-base-url':
         apkBaseUrl = value();
       case '--manifest-url':
@@ -40,7 +43,8 @@ Future<void> main(List<String> args) async {
   final match = RegExp(r'^version:\s*([^+\s]+)\+(\d+)\s*$', multiLine: true).firstMatch(pubspec);
   if (match == null) _fail('pubspec.yaml da "version: 1.2.3+4" ko\'rinishidagi qator topilmadi');
   final versionName = match.group(1)!;
-  final versionCode = int.parse(match.group(2)!);
+  // --build-number pubspec dagi '+' dan keyingi raqam o'rniga ishlatiladi (GitHub Actions uni oshirib berishi mumkin).
+  final versionCode = buildNumber ?? int.parse(match.group(2)!);
 
   if (!debug && !File('android/key.properties').existsSync()) {
     stderr.writeln(
@@ -57,6 +61,7 @@ Future<void> main(List<String> args) async {
       'build',
       'apk',
       '--$mode',
+      '--build-number=$versionCode',
       // Yangi APK ham keyingi yangilanishlarni shu manzildan qidirishi uchun.
       if (manifestUrl != null) '--dart-define=UPDATE_MANIFEST_URL=$manifestUrl',
     ],
