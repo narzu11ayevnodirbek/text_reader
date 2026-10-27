@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Faqat debug build: kompyuterdagi lokal serverdan (adb reverse orqali) OTA yangilashni sinash uchun
+     localhost'ga oddiy HTTP ruxsat. Release build'ga ta'sir qilmaydi — u yerda faqat HTTPS. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

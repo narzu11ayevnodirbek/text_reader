@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ota_update APKni ilovaning ichki xotirasidagi files/ota_update/ papkasiga yuklaydi.
+     FileProvider faqat shu papkadagi fayllarga content:// URI bera oladi. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="internal_apk_storage" path="ota_update/"/>
+</paths>
